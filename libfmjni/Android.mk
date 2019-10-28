@@ -24,7 +24,7 @@ LOCAL_CFLAGS := \
     -Wno-unused-function \
 
 ifneq ($(strip $(TARGET_ARCH)),arm64)
-LIBRARY_PATH:="/system/lib/"
+LIBRARY_PATH:="/vendor/lib/"
 LOCAL_CFLAGS+= -DLIBRARY_PATH=\"$(LIBRARY_PATH)\"
 endif
 

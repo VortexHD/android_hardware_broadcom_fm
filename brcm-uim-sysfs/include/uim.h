@@ -198,5 +198,8 @@ extern int upio_set_bluetooth_power(int on);
 int proc_hci_uartclockset(void);
 int proc_bdaddr(void);
 void read_default_bdaddr(bdaddr_t *local_addr);
+#ifdef LGE_BLUESLEEP_PM
+void set_bluetooth_preproto(int on);
+#endif
 
 #endif /* UIM_H */

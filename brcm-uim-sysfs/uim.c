@@ -1241,6 +1241,10 @@ int st_uart_config(unsigned char install)
             return UIM_FAIL;
         }
 
+#ifdef LGE_BLUESLEEP_PM
+        set_bluetooth_preproto(1);
+#endif
+
         /* Perform UART initialization */
         proc_init_uart(dev_fd, &termios);
 

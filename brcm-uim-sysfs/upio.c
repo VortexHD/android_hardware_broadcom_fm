@@ -217,5 +217,31 @@ int upio_set_bluetooth_power(int on)
     return ret;
 }
 
+#ifdef LGE_BLUESLEEP_PM
+void set_bluetooth_preproto(int on)
+{
+    int sz;
+    int fd = -1;
+    char buffer = '0';
 
-
+    switch(on)
+    {
+        case UPIO_BT_POWER_OFF:
+            buffer = '0';
+            break;
+        case UPIO_BT_POWER_ON:
+            buffer = '1';
+            break;
+    }
+    fd = open(LGE_PROC_PREPROTO, O_RDWR);
+    if (fd < 0) {
+        ALOGE("Fail to open %s \n", LGE_PROC_PREPROTO);
+        return;
+    }
+    sz = write (fd, &buffer, 1);
+    if (sz != 1) {
+        ALOGE("Fail to write %s \n", LGE_PROC_PREPROTO);
+    }
+    if (fd >= 0) close(fd);
+}
+#endif

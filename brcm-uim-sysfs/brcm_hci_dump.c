@@ -496,13 +496,15 @@ static void* v4l2_hci_snoop_thread(void* parameters)
             recvmsg(sock_fd, &msg, 0);
 
             BRCM_HCI_DUMP_DBG("recevied packet");
-            len = NLMSG_PAYLOAD(nlh, 0);
-            BRCM_HCI_DUMP_DBG("finished reading len of recevied packet");
-
+            if (nlh != NULL) {
+                len = NLMSG_PAYLOAD(nlh, 0);
+                BRCM_HCI_DUMP_DBG("finished reading len of recevied packet");
+            }
 
             if(len > 0) {
                 BRCM_HCI_DUMP_DBG("Received packet of len=%d from ldisc", len);
-                p_buf = (HC_BT_HDR *)(NLMSG_DATA(nlh));
+                if (nlh != NULL)
+                    p_buf = (HC_BT_HDR *)(NLMSG_DATA(nlh));
 
                 if(p_buf == NULL) {
                     BRCM_HCI_DUMP_DBG("p_buf is NULL");

@@ -306,7 +306,7 @@ int hw_set_lpm(char *p_conf_name, char *p_conf_value)
 int hw_set_uart_baudrate(char *p_conf_name, char *p_conf_value)
 {
     strcat(hw_cfg_string, " custom_baudrate=");
-    strcat(hw_cfg_string, p_conf_value);
+    strncat(hw_cfg_string, p_conf_value, sizeof(hw_cfg_string)-strlen(hw_cfg_string)-1);
     sscanf(p_conf_value, "%lu", &cust_baud_rate);
     UIM_DBG("%s = %s", p_conf_name, p_conf_value);
     return 0;
@@ -350,7 +350,7 @@ int hw_set_driver_module_path(char *p_conf_name, char *p_conf_value)
 int hw_set_patchram_settlement_delay(char *p_conf_name, char *p_conf_value)
 {
     strcat(hw_cfg_string, " patchram_settlement_delay=");
-    strcat(hw_cfg_string, p_conf_value);
+    strncat(hw_cfg_string, p_conf_value, sizeof(hw_cfg_string)-strlen(hw_cfg_string)-1);
     UIM_DBG("%s = %s", p_conf_name, p_conf_value);
     return 0;
 }
@@ -394,7 +394,7 @@ int hw_set_patchram_filename(char *p_conf_name, char *p_conf_value)
 int dbg_ldisc_drv(char *p_conf_name, char *p_conf_value)
 {
     strcat(hw_cfg_string, " ldisc_dbg_param=");
-    strcat(hw_cfg_string, p_conf_value);
+    strncat(hw_cfg_string, p_conf_value, sizeof(hw_cfg_string)-strlen(hw_cfg_string)-1);
     UIM_DBG("%s = %s", p_conf_name, p_conf_value);
     return 0;
 }
@@ -412,7 +412,7 @@ int dbg_ldisc_drv(char *p_conf_name, char *p_conf_value)
 int dbg_bt_drv(char *p_conf_name, char *p_conf_value)
 {
     strcat(bt_dbg_cfg_string, " bt_dbg_param=");
-    strcat(bt_dbg_cfg_string, p_conf_value);
+    strncat(bt_dbg_cfg_string, p_conf_value, sizeof(bt_dbg_cfg_string)-strlen(bt_dbg_cfg_string)-1);
     UIM_DBG("%s = %s", p_conf_name, p_conf_value);
     return 0;
 }
@@ -430,7 +430,7 @@ int dbg_bt_drv(char *p_conf_name, char *p_conf_value)
 int dbg_fm_drv(char *p_conf_name, char *p_conf_value)
 {
     strcat(fm_dbg_cfg_string, " fm_dbg_param=");
-    strcat(fm_dbg_cfg_string, p_conf_value);
+    strncat(fm_dbg_cfg_string, p_conf_value, sizeof(fm_dbg_cfg_string)-strlen(fm_dbg_cfg_string)-1);
     UIM_DBG("%s = %s", p_conf_name, p_conf_value);
     return 0;
 }
@@ -448,7 +448,7 @@ int dbg_fm_drv(char *p_conf_name, char *p_conf_value)
 int dbg_ant_drv(char *p_conf_name, char *p_conf_value)
 {
     strcat(ant_dbg_cfg_string, " ant_dbg_param=");
-    strcat(ant_dbg_cfg_string, p_conf_value);
+    strncat(ant_dbg_cfg_string, p_conf_value, sizeof(ant_dbg_cfg_string)-strlen(ant_dbg_cfg_string)-1);
     UIM_DBG("%s = %s", p_conf_name, p_conf_value);
     return 0;
 }
@@ -523,7 +523,8 @@ int path_hci_snoop(char *p_conf_name, char *p_conf_value)
         return -1;
     }
     memset(hci_snoop_path, 0, sizeof(hci_snoop_path));
-    strcpy(hci_snoop_path, p_conf_value);
+    strncpy(hci_snoop_path, p_conf_value, sizeof(hci_snoop_path) - 1);
+    hci_snoop_path[sizeof(hci_snoop_path) - 1] = '\0';
     UIM_DBG("%s = %s", p_conf_name, p_conf_value);
     return 0;
 }
@@ -1592,6 +1593,7 @@ int main(void)
     {
         UIM_ERR("unable to write vendor params to %s", LDISC_VENDOR_PARAMS);
         UIM_ERR("restarting uim");
+        close(st_fd);
         return UIM_FAIL;
     }
 

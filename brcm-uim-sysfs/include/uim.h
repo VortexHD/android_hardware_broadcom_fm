@@ -151,16 +151,16 @@ typedef struct {
 #define LDISC_SYSFS_BT_ERR SYSFS_PREFIX "bt_err"
 #define LDISC_SYSFS_FM_ERR SYSFS_PREFIX "fm_err"
 
-#define FMRX_COMP_SCAN_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_comp_scan"
-#define FMRX_DEEMPH_MODE_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_deemph_mode"
-#define FMRX_RDS_AF_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_rds_af"
-#define FMRX_RDS_ON_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_rds_on"
-#define FMRX_BAND_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_band"
-#define FMRX_RSSI_LVL_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_rssi_lvl"
-#define FMRX_SNR_LVL_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_snr_lvl"
-#define FMRX_CHL_SPACE_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_chl_lvl"
-#define FMRX_AUDIO_PINS_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_fm_audio_pins"
-#define FMRX_SEARCH_ABORT_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_search_abort"
+#define FMRX_COMP_SCAN_SYSFS_ENTRY SYSFS_PREFIX_V4L2 "fmrx_comp_scan"
+#define FMRX_DEEMPH_MODE_SYSFS_ENTRY SYSFS_PREFIX_V4L2 "fmrx_deemph_mode"
+#define FMRX_RDS_AF_SYSFS_ENTRY SYSFS_PREFIX_V4L2 "fmrx_rds_af"
+#define FMRX_RDS_ON_SYSFS_ENTRY SYSFS_PREFIX_V4L2 "fmrx_rds_on"
+#define FMRX_BAND_SYSFS_ENTRY SYSFS_PREFIX_V4L2 "fmrx_band"
+#define FMRX_RSSI_LVL_SYSFS_ENTRY SYSFS_PREFIX_V4L2 "fmrx_rssi_lvl"
+#define FMRX_SNR_LVL_SYSFS_ENTRY SYSFS_PREFIX_V4L2 "fmrx_snr_lvl"
+#define FMRX_CHL_SPACE_SYSFS_ENTRY SYSFS_PREFIX_V4L2 "fmrx_chl_lvl"
+#define FMRX_AUDIO_PINS_SYSFS_ENTRY SYSFS_PREFIX_V4L2 "fmrx_fm_audio_pins"
+#define FMRX_SEARCH_ABORT_SYSFS_ENTRY SYSFS_PREFIX_V4L2 "fmrx_search_abort"
 
 /* install sysfs entry values */
 #define V4L2_STATUS_ERR '2'  // error occured in BT application (HCI command timeout or HW error)

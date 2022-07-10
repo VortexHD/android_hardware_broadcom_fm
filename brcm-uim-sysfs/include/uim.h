@@ -27,9 +27,10 @@
 *
 ***********************************************************************************/
 
-
 #ifndef UIM_H
 #define UIM_H
+
+#include "vnd_buildcfg.h"
 
 #define TRUE 1
 #define FALSE 0
@@ -66,8 +67,14 @@
 #define HCI_UART_LL     4
 
 #define LPM_SLEEP_MODE 1
+
+#ifndef LPM_IDLE_THRESHOLD
 #define LPM_IDLE_THRESHOLD 1
+#endif
+#ifndef LPM_HC_IDLE_THRESHOLD
 #define LPM_HC_IDLE_THRESHOLD 1
+#endif
+
 #define LPM_BT_WAKE_POLARITY 1
 #define LPM_HOST_WAKE_POLARITY 1
 #define LPM_ALLOW_HOST_SLEEP_DURING_SCO 1
@@ -183,7 +190,9 @@ typedef struct {
 #ifdef BOARD_BRCM_HCI_NUM
 #define N_BRCM_HCI BOARD_BRCM_HCI_NUM
 #else
+#ifndef N_BRCM_HCI
 #define N_BRCM_HCI 25
+#endif
 #endif
 
 /* Functions to insert and remove the kernel modules from the system*/

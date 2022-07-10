@@ -58,7 +58,9 @@
 /* netlink protocol type for which kernel will respond.
 ** This is also declared in Line discipline driver for Kernel space - User space
 ** communication. (For HCI packet to transfer from Kernel space to User space) */
+#ifndef NETLINK_USER
 #define NETLINK_USER 29
+#endif
 
 /* Size of memory allocated in kernel to userspace netlink socket to hold incoming hcisnoop packet */
 #define MAX_PAYLOAD 2048

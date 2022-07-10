@@ -61,6 +61,13 @@
 #include <cutils/misc.h>
 #endif
 
+#ifdef LGE_RECOVERY_BLOCK_READ
+#include <sys/epoll.h>
+#define MAX_EVENTS  64
+#define INVALID_FD (-1)
+#define MAX_WAIT_TIME 3000
+#endif
+
 #define UIM_DEBUG 1
 
 #if UIM_DEBUG          /* limited debug messages */
@@ -742,8 +749,54 @@ int read_hci_event(int fd, unsigned char *buf, int size)
     int reading = 1;
     int rd_retry_count = 0;
     struct timespec tm = {0, 50*1000*1000};
+#ifdef LGE_RECOVERY_BLOCK_READ
+    int efd, ret;
+    struct epoll_event event, events[MAX_EVENTS];
+#endif
 
     UIM_START_FUNC();
+
+#ifdef LGE_RECOVERY_BLOCK_READ
+    UIM_VER(" epoll_create");
+    efd = epoll_create(MAX_EVENTS);
+    if (efd == INVALID_FD) {
+        UIM_ERR(" unable to create epoll instance: %s", strerror(errno));
+        close(efd);
+        return -1;
+    }
+
+    memset(&event, 0, sizeof(event));
+    event.events  = EPOLLIN | EPOLLERR;
+    event.data.fd = fd;
+
+    UIM_VER(" epoll_ctl");
+    ret = epoll_ctl(efd, EPOLL_CTL_ADD, fd, &event);
+    if (ret == INVALID_FD) {
+        UIM_ERR("unable to create eventfd: %s",  strerror(errno));
+        close(efd);
+        return -1;
+    }
+
+    UIM_VER(" epoll_wait");
+    do {
+        ret = epoll_wait(efd, events, MAX_EVENTS, MAX_WAIT_TIME);
+    } while ((ret == -1 || ret == 0) && errno == EINTR);
+
+    if (ret == -1) {
+        UIM_ERR("error in epoll_wait: %s",  strerror(errno));
+        close(efd);
+        return -1;
+    }
+
+    if (ret == 0) {
+	UIM_ERR("timeout in epoll_wait: %s",  strerror(errno));
+	close(efd);
+	return -1;
+    }
+
+    UIM_VER(" receive signal");
+    close(efd);
+#endif
 
     UIM_VER(" read_hci_event");
     if (size <= 0)

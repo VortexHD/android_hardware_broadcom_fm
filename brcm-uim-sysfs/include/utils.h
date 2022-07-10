@@ -14,7 +14,7 @@
  *  along with this program;if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-  *  Copyright (C) 2009-2015 Broadcom Corporation
+  *  Copyright (C) 2009-2017 Broadcom Corporation
  */
 
 
@@ -52,6 +52,7 @@ typedef struct _hc_buffer_hdr
 
 #define MAX_ACL_PKT_SIZE 4096
 
+#define UNUSED(x) (void)(x)
 
 /******************************************************************************
 **  Extern variables and functions
@@ -82,17 +83,6 @@ void utils_init ();
 **
 *******************************************************************************/
 void utils_cleanup ();
-
-/*******************************************************************************
-**
-** Function        utils_queue_init
-**
-** Description     Initialize the given buffer queue
-**
-** Returns         None
-**
-*******************************************************************************/
-__attribute__((unused)) static void utils_queue_init (BUFFER_Q *p_q);
 
 /*******************************************************************************
 **
@@ -216,7 +206,7 @@ uint8_t* utils_alloc (int size);
 **
 ** Returns         None+**
 *******************************************************************************/
-void utils_release(HC_BT_HDR* ptr);
+void utils_release(void* ptr);
 
 /*******************************************************************************
 **
@@ -224,21 +214,21 @@ void utils_release(HC_BT_HDR* ptr);
 **
 ** Description     Get number of allocated buffers
 **
-** Returns         None
+** Returns         Number of buffers
 **
 *******************************************************************************/
-uint16_t utils_get_count();
+uint16_t utils_get_count (void);
 
 /*******************************************************************************
 **
-** Function        utils_get_count
+** Function        utils_get_first
 **
-** Description     Get number of allocated buffers
+** Description     Get allocated buffer
 **
-** Returns         None
+** Returns         buffer pointer
 **
 *******************************************************************************/
-void* utils_get_first ();
+void* utils_get_first (void);
 
 #endif /* UTILS_H */
 

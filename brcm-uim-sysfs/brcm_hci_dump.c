@@ -14,11 +14,7 @@
  *  along with this program;if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-  *  Copyright (C) 2009-2015 Broadcom Corporation
-  *  Copyright (C) 2015 Sony Mobile Communications Inc.
-  *
-  *  NOTE: This file has been modified by Sony Mobile Communications Inc.
-  *  Modifications are licensed under the License.
+  *  Copyright (C) 2009-2017 Broadcom Corporation
  */
 
 /************************************************************************************
@@ -32,16 +28,19 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <linux/netlink.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <cutils/log.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <malloc.h>
-#include <string.h>
+#include <inttypes.h>
+#include <limits.h>
+
 #include "utils.h"
 #include "btsnoop.h"
 #include "brcm_hci_dump.h"
@@ -70,9 +69,14 @@ HCI_SNOOP_STATUS snoop_status = HCI_SNOOP_STOP;
 /* Thread for hci snoop */
 pthread_t thread_hcisnoop;
 
+/* hci snoop save log */
+extern int hci_snoop_save_log_enable;
+
 /* hci snoop filepath */
 extern char hci_snoop_path[HCI_SNOOP_PATH_LEN];
 
+// Epoch in microseconds since 01/01/0000.
+static const uint64_t BTSNOOP_EPOCH_DELTA = 0x00dcddb30f2f8000ULL;
 
 /*******************************************************************************
 **
@@ -131,7 +135,7 @@ HC_BT_HDR* acl_rx_frame_integrity_check_v4l2 (HC_BT_HDR *p_rcv_msg)
     if (utils_get_count())
     {
         uint16_t save_handle;
-        HC_BT_HDR *p_hdr = utils_get_first();
+        HC_BT_HDR *p_hdr = (HC_BT_HDR *)utils_get_first();
 
         BRCM_HCI_DUMP_DBG("In acl_rx_q.count");
 
@@ -382,14 +386,14 @@ static inline int is_signaled(fd_set* set)
     return FD_ISSET(signal_fds[0], set);
 }
 
-
 /* Read thread for snooping packets from Line discipline driver */
-static void* v4l2_hci_snoop_thread(__attribute__((unused)) void* parameters)
+static void* v4l2_hci_snoop_thread(void* parameters)
 {
     HC_BT_HDR *p_buf = NULL;
     fd_set input;
     char reason = 0;
     int len = 0;
+    UNUSED(parameters);
 
     //ACL related variables
     uint8_t *p;
@@ -425,12 +429,17 @@ static void* v4l2_hci_snoop_thread(__attribute__((unused)) void* parameters)
     dest_addr.nl_groups = 0; /* unicast */
 
     nlh = (struct nlmsghdr *)malloc(NLMSG_SPACE(MAX_PAYLOAD));
+    if (nlh == NULL)
+    {
+        close(sock_fd);
+        return NULL;
+    }
     memset(nlh, 0, NLMSG_SPACE(MAX_PAYLOAD));
     nlh->nlmsg_len = NLMSG_SPACE(MAX_PAYLOAD);
     nlh->nlmsg_pid = getpid();
     nlh->nlmsg_flags = 0;
 
-    strcpy(NLMSG_DATA(nlh), "START HCI SNOOP");
+    strcpy((char *)(NLMSG_DATA(nlh)), "START HCI SNOOP");
 
     iov.iov_base = (void *)nlh;
     iov.iov_len = nlh->nlmsg_len;
@@ -472,10 +481,8 @@ static void* v4l2_hci_snoop_thread(__attribute__((unused)) void* parameters)
             {
                 BRCM_HCI_DUMP_DBG("HCI snoop thread termination SIGNAL RECEIVED");
                 snoop_status = HCI_SNOOP_STOP;
-                free(nlh);
-                close(sock_fd);
                 BRCM_HCI_DUMP_DBG("Exiting snoop thread");
-                return 0;
+                break;
             }
             else {
                 BRCM_HCI_DUMP_ERR("UNKNOWN signal received");
@@ -485,6 +492,7 @@ static void* v4l2_hci_snoop_thread(__attribute__((unused)) void* parameters)
         if (FD_ISSET(sock_fd, &input))
         {
             recvmsg(sock_fd, &msg, 0);
+
             BRCM_HCI_DUMP_DBG("recevied packet");
             len = NLMSG_PAYLOAD(nlh, 0);
             BRCM_HCI_DUMP_DBG("finished reading len of recevied packet");
@@ -492,7 +500,7 @@ static void* v4l2_hci_snoop_thread(__attribute__((unused)) void* parameters)
 
             if(len > 0) {
                 BRCM_HCI_DUMP_DBG("Received packet of len=%d from ldisc", len);
-                p_buf = NLMSG_DATA(nlh);
+                p_buf = (HC_BT_HDR *)(NLMSG_DATA(nlh));
 
                 if(p_buf == NULL) {
                     BRCM_HCI_DUMP_DBG("p_buf is NULL");
@@ -598,11 +606,15 @@ static void* v4l2_hci_snoop_thread(__attribute__((unused)) void* parameters)
                     else if(p_buf->event == MSG_STACK_TO_HC_HCI_ACL ||
                             p_buf->event == MSG_STACK_TO_HC_HCI_SCO ||
                             p_buf->event == MSG_STACK_TO_HC_HCI_CMD ||
-                            p_buf->event == MSG_FM_TO_HC_HCI_CMD)
+                            p_buf->event == MSG_FM_TO_HC_HCI_CMD ||
+                            p_buf->event == MSG_ANT_TO_HC_HCI_CMD)
                     {
                         btsnoop_capture(p_buf, FALSE);
                     }
                     else if (p_buf->event == MSG_HC_TO_FM_HCI_EVT){
+                        btsnoop_capture(p_buf, TRUE);
+                    }
+                    else if (p_buf->event == MSG_HC_TO_ANT_HCI_EVT){
                         btsnoop_capture(p_buf, TRUE);
                     }
                 /* UNKNOWN packets */
@@ -617,24 +629,39 @@ static void* v4l2_hci_snoop_thread(__attribute__((unused)) void* parameters)
         }
     }
 
-    BRCM_HCI_DUMP_DBG("Exiting thread hci_snoop_thread from end");
+    free(nlh);
+    close(sock_fd);
 
-    return 0;
+    BRCM_HCI_DUMP_DBG("Exiting thread hci_snoop_thread from end");
+    return NULL;
 }
 
+static uint64_t btsnoop_timestamp(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+
+    // Timestamp is in microseconds.
+    uint64_t timestamp = tv.tv_sec * 1000 * 1000LL;
+    timestamp += tv.tv_usec;
+    timestamp += BTSNOOP_EPOCH_DELTA;
+    return timestamp;
+}
 
 int hci_snoop_bkp_file()
 {
     if (hci_snoop_path[0] != '\0')
     {
-            char new_path[256] = {0};
+        if(hci_snoop_save_log_enable)
+        {
+            char new_path[PATH_MAX] = {0};
 
-            strcpy(new_path, hci_snoop_path);
-            strcat(new_path, ".old");
+            snprintf(new_path, PATH_MAX, "%s.%" PRIu64, hci_snoop_path,
+                    btsnoop_timestamp());
             BRCM_HCI_DUMP_DBG("renaming file and creating backup");
             if (rename(hci_snoop_path, new_path))
             {
                 BRCM_HCI_DUMP_ERR("logging():rename failed, %d", errno);
+            }
             }
             BRCM_HCI_DUMP_DBG("opening snoop file");
             btsnoop_open(hci_snoop_path);
@@ -708,12 +735,3 @@ int v4l2_stop_hci_snoop()
     BRCM_HCI_DUMP_DBG("hcisnoop read thread EXITED");
     return result;
 }
-
-int v4l2_get_hci_snoop_status()
-{
-    return snoop_status;
-}
-
-
-
-

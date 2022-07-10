@@ -15,7 +15,7 @@
  *  along with this program;if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-  *  Copyright (C) 2009-2015 Broadcom Corporation
+  *  Copyright (C) 2009-2017 Broadcom Corporation
   *  Copyright (C) 2015 Sony Mobile Communications Inc.
   *
   *  NOTE: This file has been modified by Sony Mobile Communications Inc.
@@ -34,6 +34,8 @@
 ***********************************************************************************/
 /* Set macro to true in buildspec.mk */
 
+#define LOG_TAG "brcm-uim"
+
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -47,8 +49,6 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include <dirent.h>
-#include <malloc.h>
-#include <string.h>
 #include <ctype.h>
 
 #include "uim.h"
@@ -60,9 +60,6 @@
 #include <cutils/log.h>
 #include <cutils/misc.h>
 #endif
-
-#undef  LOG_TAG
-#define LOG_TAG "brcm-uim"
 
 #define UIM_DEBUG 1
 
@@ -113,10 +110,14 @@ static unsigned long cust_baud_rate = 3000000;
 static char driver_module_path[MAX_KMODULE_PATH_SIZE] = "/system/lib/modules/";
 static char uart_port_name[UART_PORT_NAME_SIZE] = "/dev/ttyHS0";
 int lpmenable;
+#if V4L2_SNOOP_ENABLE
 int hci_snoop_enable = 0;
+int hci_snoop_save_log_enable = 0;
 char hci_snoop_path[HCI_SNOOP_PATH_LEN] = "/sdcard/btsnoop_hci.log";
+#endif
 static char bt_dbg_cfg_string[CFG_PARAM_STRING_SIZE] = "";
 static char fm_dbg_cfg_string[CFG_PARAM_STRING_SIZE] = "";
+static char ant_dbg_cfg_string[CFG_PARAM_STRING_SIZE] = "";
 static char fw_patchfile_name[FW_PATCH_FILENAME_MAXLEN] = "";
 
 
@@ -144,8 +145,12 @@ int pass_vendor_params()
     if (fd_vendor_params > 0)
     {
         if(write(fd_vendor_params, hw_cfg_string, CFG_PARAM_STRING_SIZE) < 0)
+        {
+            close(fd_vendor_params);
             return UIM_FAIL;
+        }
 
+        close(fd_vendor_params);
         UIM_DBG("vendor params passed to ldisc");
         return 0;
     }
@@ -165,6 +170,13 @@ int pass_vendor_params()
 *******************************************************************************/
 int userial_set_port(char *p_conf_name, char *p_conf_value)
 {
+    if (sizeof(uart_port_name) <= strlen(p_conf_value))
+    {
+        UIM_ERR("length of %s is too long (%s)", p_conf_name, p_conf_value);
+        return -1;
+    }
+
+    memset(uart_port_name, 0, sizeof(uart_port_name));
     strcpy(uart_port_name, p_conf_value);
     UIM_DBG("%s = %s", p_conf_name, p_conf_value);
     return 0;
@@ -313,6 +325,13 @@ int hw_set_uart_baudrate(char *p_conf_name, char *p_conf_value)
  *******************************************************************************/
 int hw_set_driver_module_path(char *p_conf_name, char *p_conf_value)
 {
+    if (sizeof(driver_module_path) <= strlen(p_conf_value))
+    {
+        UIM_ERR("length of %s is too long (%s)", p_conf_name, p_conf_value);
+        return -1;
+    }
+
+    memset(driver_module_path, 0, sizeof(driver_module_path));
     strcpy(driver_module_path, p_conf_value);
     UIM_DBG("%s = %s", p_conf_name, p_conf_value);
     return 0;
@@ -322,7 +341,7 @@ int hw_set_driver_module_path(char *p_conf_name, char *p_conf_value)
  **
  ** Function        hw_set_patchram_settlement_delay
  **
- ** Description     set the location of .ko modules (driver modules) to insmod at startup.
+ ** Description     set patchram settlement delay.
  **
  ** Returns         0 : Success
  **                 Otherwise : Fail
@@ -348,6 +367,13 @@ int hw_set_patchram_settlement_delay(char *p_conf_name, char *p_conf_value)
  *******************************************************************************/
 int hw_set_patchram_filename(char *p_conf_name, char *p_conf_value)
 {
+    if (sizeof(fw_patchfile_name) <= strlen(p_conf_value))
+    {
+        UIM_ERR("length of %s is too long (%s)", p_conf_name, p_conf_value);
+        return -1;
+    }
+
+    memset(fw_patchfile_name, 0, sizeof(fw_patchfile_name));
     strcpy(fw_patchfile_name, p_conf_value);
     UIM_DBG("%s = %s", p_conf_name, p_conf_value);
     return 0;
@@ -409,8 +435,24 @@ int dbg_fm_drv(char *p_conf_name, char *p_conf_value)
     return 0;
 }
 
+/*******************************************************************************
+ **
+ ** Function        dbg_ant_drv
+ **
+ ** Description     set to enable debugging in ANT+ driver
+ **
+ ** Returns         0 : Success
+ **                 Otherwise : Fail
+ **
+ *******************************************************************************/
+int dbg_ant_drv(char *p_conf_name, char *p_conf_value)
+{
+    strcat(ant_dbg_cfg_string, " ant_dbg_param=");
+    strcat(ant_dbg_cfg_string, p_conf_value);
+    UIM_DBG("%s = %s", p_conf_name, p_conf_value);
+    return 0;
+}
 #endif
-
 
 #if V4L2_SNOOP_ENABLE
 /*******************************************************************************
@@ -439,6 +481,29 @@ int enable_hci_snoop(char *p_conf_name, char *p_conf_value)
     return 0;
 }
 
+/*******************************************************************************
+ **
+ ** Function        enable_hci_snoop_save_log
+ **
+ ** Description     read parameter to enable/disable hci snoop save log for V4L2
+ **
+ ** Returns         0 : Success
+ **                 Otherwise : Fail
+ **
+ *******************************************************************************/
+int enable_hci_snoop_save_log(char *p_conf_name, char *p_conf_value)
+{
+    if (strcmp(p_conf_value, "true") == 0)
+    {
+        hci_snoop_save_log_enable = 1;
+    }
+    else
+    {
+        hci_snoop_save_log_enable = 0;
+    }
+    UIM_DBG("%s = %s", p_conf_name, p_conf_value);
+    return 0;
+}
 
 /*******************************************************************************
  **
@@ -452,6 +517,11 @@ int enable_hci_snoop(char *p_conf_name, char *p_conf_value)
  *******************************************************************************/
 int path_hci_snoop(char *p_conf_name, char *p_conf_value)
 {
+    if (sizeof(hci_snoop_path) <= strlen(p_conf_value))
+    {
+        UIM_ERR("length of %s is too long (%s)", p_conf_name, p_conf_value);
+        return -1;
+    }
     memset(hci_snoop_path, 0, sizeof(hci_snoop_path));
     strcpy(hci_snoop_path, p_conf_value);
     UIM_DBG("%s = %s", p_conf_name, p_conf_value);
@@ -494,19 +564,15 @@ static const conf_entry_t vendor_conf_table[] = {
     {"DBG_BT_DRV",dbg_bt_drv},
     {"DBG_LDISC_DRV",dbg_ldisc_drv},
     {"DBG_FM_DRV",dbg_fm_drv},
+    {"DBG_ANT_DRV", dbg_ant_drv},
 #endif
-    {(const char *) NULL, NULL}
-};
-
-
 #if V4L2_SNOOP_ENABLE
-static const conf_entry_t stack_conf_table[] = {
     {"BtSnoopLogOutput", enable_hci_snoop},
+    {"BtSnoopSaveLog", enable_hci_snoop_save_log},
     {"BtSnoopFileName", path_hci_snoop},
+#endif
     {(const char *) NULL, NULL}
 };
-#endif
-
 
 /*******************************************************************************
 **
@@ -586,6 +652,7 @@ static inline void cleanup()
     if (dev_fd == -1)
         return;
 
+    // flush Tx before close to make sure no chars in buffer
     tcflush(dev_fd, TCIOFLUSH);
 
     close(dev_fd);
@@ -605,7 +672,6 @@ static inline void err_cleanup(int st_fd)
     st_fd = -1;
     UIM_ERR("Restarting UIM due to error!");
 }
-
 
 #ifdef ANDROID   /* library for android to do insmod/rmmod  */
 
@@ -662,15 +728,13 @@ __attribute__((unused)) static int rmmod(const char *modname)
 }
 #endif /* ANDROID */
 
-
-
 /****************************************************************************
  * Function to read the HCI event from the given file descriptor
  *
  * This will parse the response received and returns error
  * if the required response is not received
  ****************************************************************************/
-int read_hci_event(int fd, char *buf, int size)
+int read_hci_event(int fd, unsigned char *buf, int size)
 {
     int remain, rd;
     int count = 0;
@@ -738,7 +802,7 @@ static int read_command_complete(int fd, unsigned short opcode)
     UIM_START_FUNC();
 
     UIM_VER(" Command complete started");
-    if (read_hci_event(fd, (char *)&resp, sizeof(resp)) < 0) {
+    if (read_hci_event(fd, (unsigned char *)&resp, sizeof(resp)) < 0) {
         UIM_ERR(" Invalid response");
         return -1;
     }
@@ -857,12 +921,14 @@ validate_baudrate(int baud_rate, int *value)
 *****************************************************************************/
 static int proc_set_lpm_param()
 {
-    char hci_writesleepmode_cmd[] = {0x01, 0x27, 0xFC, 0x0C, 0x00, 0x00, 0x01,\
+    const char hci_writesleepmode_cmd[] = {0x01, 0x27, 0xFC, 0x0C, 0x00, 0x00, 0x01,\
                                      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, \
                                      0x00, 0x00};
     char cmd[100];
     UIM_DBG("lpmenable %d",lpmenable);
-    char *temp = hci_writesleepmode_cmd;
+    char temp[16];
+    memset(temp, 0, 16);
+    memcpy(temp, hci_writesleepmode_cmd, 16);
     strcat(hw_cfg_string, " lpm_param=");
     if(lpmenable) {
         memcpy((temp+4), &lpm_uim_param, LPM_CMD_PARAM_SIZE);
@@ -920,13 +986,11 @@ static int proc_set_custom_baud_rate()
     cfsetispeed(&termios, termi_baudrate);
     tcsetattr(dev_fd, TCSANOW, &termios);
 
-    fcntl(dev_fd, F_SETFL,fcntl(dev_fd, F_GETFL) | O_NONBLOCK);
     UIM_DBG("baud rate set to %ld", cust_baud_rate);
 
     UIM_END_FUNC();
     return 0;
 }
-
 
 /*******************************************************************************
 **
@@ -952,7 +1016,6 @@ static int hw_strncmp (const char *p_str1, const char *p_str2, const int len)
 
     return 0;
 }
-
 
 /*******************************************************************************
 **
@@ -1047,7 +1110,6 @@ static uint8_t hw_config_findpatch(char *p_chip_id_str)
     return (retval);
 }
 
-
 /*******************************************************************************
 **
 ** Function         proc_read_local_name
@@ -1058,10 +1120,9 @@ static uint8_t hw_config_findpatch(char *p_chip_id_str)
 ** Returns          0: match, otherwise: not match
 **
 *******************************************************************************/
-
 static uint8_t proc_read_local_name(char* p_chip_id_str)
 {
-    char hci_read_localname[] = { 0x01, 0x14, 0x0C, 0x00 };
+    unsigned char hci_read_localname[] = { 0x01, 0x14, 0x0C, 0x00 };
     char buff[READ_LOCALNAME_RESP_BUFF_SIZE];
     char *p_name, *p_tmp;
     int len, i;
@@ -1074,7 +1135,7 @@ static uint8_t proc_read_local_name(char* p_chip_id_str)
         return FALSE;
     }
 
-    if(read_hci_event(dev_fd, buff, FW_PATCH_FILENAME_MAXLEN) < 0) {
+    if (read_hci_event(dev_fd, (unsigned char *)buff, FW_PATCH_FILENAME_MAXLEN) < 0) {
         UIM_ERR(" Invalid response for hci_read_localname");
         return FALSE;
     }
@@ -1138,10 +1199,11 @@ void proc_init_uart(int uart_fd, struct termios *termios)
     cfsetispeed(termios, B115200);
     tcsetattr(uart_fd, TCSANOW, termios);
 
+    fcntl(dev_fd, F_SETFL, fcntl(dev_fd, F_GETFL) | O_NONBLOCK);
+
     UIM_END_FUNC();
     return;
 }
-
 
 /*****************************************************************************
  * This Function handles the Signals sent from the Kernel Init Manager.
@@ -1240,7 +1302,6 @@ int st_uart_config(unsigned char install)
     return 0;
 }
 
-
 /*****************************************************************************
 * Function to process BD ADDRESS
 *****************************************************************************/
@@ -1248,6 +1309,7 @@ int proc_bdaddr()
 {
     bdstr_t bdstr;
     int fd =-1,res=0;
+    int sz;
 
     /*Read BD Addr*/
     read_default_bdaddr(&bd_addr);
@@ -1257,12 +1319,17 @@ int proc_bdaddr()
     UIM_DBG("%s, bdstr=%s", __func__, bdstr);
 
     fd = open(BDADDR_SYSFS_ENTRY, O_RDWR);
-    if ((fd < 0)|| (write(fd, &bdstr, 18)<=0)){
-        UIM_ERR("unable to open %s (%s)", BDADDR_SYSFS_ENTRY,strerror(errno));
+    if (fd < 0) {
+        UIM_ERR("unable to open %s: %s (%d)", BDADDR_SYSFS_ENTRY, strerror(errno), errno);
         res =  UIM_FAIL;
+        return res;
     }
-    if( fd )
-        close(fd);
+    sz = write(fd, &bdstr, 18);
+    if (sz <= 0) {
+        UIM_ERR("failed to write bdaddr to %s: %s (%d)", BDADDR_SYSFS_ENTRY, strerror(errno), errno);
+        res = UIM_FAIL;
+    }
+    close(fd);
     return res;
 }
 
@@ -1294,8 +1361,93 @@ int proc_hci_reset()
 
     UIM_END_FUNC();
     return 0;
-
 }
+
+/*****************************************************************************
+* Function to change sysfs owner
+ *****************************************************************************/
+void change_sysfs_owner()
+{
+    UIM_START_FUNC();
+
+#if V4L2_SNOOP_ENABLE
+    if(chown(LDISC_SYSFS_SNOOP, AID_BLUETOOTH, AID_BLUETOOTH) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            LDISC_SYSFS_SNOOP, strerror(errno));
+    }
+#endif
+    if(chown(INSTALL_SYSFS_ENTRY, AID_BLUETOOTH, AID_BLUETOOTH) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            INSTALL_SYSFS_ENTRY, strerror(errno));
+    }
+    if(chown(LDISC_SYSFS_BT_ERR, AID_BLUETOOTH, AID_BLUETOOTH) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            LDISC_SYSFS_BT_ERR, strerror(errno));
+    }
+
+    if(chown(LDISC_SYSFS_FM_ERR, AID_SYSTEM, AID_SYSTEM) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            LDISC_SYSFS_FM_ERR, strerror(errno));
+    }
+    if(chown(FMRX_COMP_SCAN_SYSFS_ENTRY, AID_SYSTEM, AID_SYSTEM) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            FMRX_COMP_SCAN_SYSFS_ENTRY, strerror(errno));
+    }
+    if(chown(FMRX_DEEMPH_MODE_SYSFS_ENTRY, AID_SYSTEM, AID_SYSTEM) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            FMRX_DEEMPH_MODE_SYSFS_ENTRY, strerror(errno));
+    }
+    if(chown(FMRX_RDS_AF_SYSFS_ENTRY, AID_SYSTEM, AID_SYSTEM) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            FMRX_RDS_AF_SYSFS_ENTRY, strerror(errno));
+    }
+    if(chown(FMRX_RDS_ON_SYSFS_ENTRY, AID_SYSTEM, AID_SYSTEM) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            FMRX_RDS_ON_SYSFS_ENTRY, strerror(errno));
+    }
+    if(chown(FMRX_BAND_SYSFS_ENTRY, AID_SYSTEM, AID_SYSTEM) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            FMRX_BAND_SYSFS_ENTRY, strerror(errno));
+    }
+    if(chown(FMRX_RSSI_LVL_SYSFS_ENTRY, AID_SYSTEM, AID_SYSTEM) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            FMRX_RSSI_LVL_SYSFS_ENTRY, strerror(errno));
+    }
+    if(chown(FMRX_SNR_LVL_SYSFS_ENTRY, AID_SYSTEM, AID_SYSTEM) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            FMRX_SNR_LVL_SYSFS_ENTRY, strerror(errno));
+    }
+    if(chown(FMRX_CHL_SPACE_SYSFS_ENTRY, AID_SYSTEM, AID_SYSTEM) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            FMRX_CHL_SPACE_SYSFS_ENTRY, strerror(errno));
+    }
+    if(chown(FMRX_AUDIO_PINS_SYSFS_ENTRY, AID_SYSTEM, AID_SYSTEM) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            FMRX_AUDIO_PINS_SYSFS_ENTRY, strerror(errno));
+    }
+    if(chown(FMRX_SEARCH_ABORT_SYSFS_ENTRY, AID_SYSTEM, AID_SYSTEM) == -1)
+    {
+        UIM_ERR("failed to change ownership for %s: %s",
+            FMRX_SEARCH_ABORT_SYSFS_ENTRY, strerror(errno));
+    }
+
+    UIM_END_FUNC();
+    return;
+}
+
 
 /*****************************************************************************
 * Function to convert the BD address from ascii to hex value
@@ -1393,7 +1545,6 @@ void read_default_bdaddr(bdaddr_t *local_addr)
 }
 #endif
 
-
 /*****************************************************************************
 * Main function
 *****************************************************************************/
@@ -1402,23 +1553,19 @@ int main(void)
     int st_fd, err;
     struct pollfd p;
     unsigned char install;
+    int fd_hcisnoop = -1;
+
+    signal(SIGINT, SIG_IGN);
+    signal(SIGTERM, SIG_IGN);
 
     UIM_START_FUNC();
     err = 0;
 
     /* Read configuration parameters for hardware config */
-    if (vnd_load_conf(VENDOR_LIB_CONF_FILE, &vendor_conf_table[0]))
+    if (vnd_load_conf(VENDOR_LIB_CONF_FILE, (conf_entry_t *)&vendor_conf_table))
     {
         return UIM_FAIL;
     }
-
-#if V4L2_SNOOP_ENABLE
-    /* Read configuration parameters for hci snoop */
-    if (vnd_load_conf(STACK_CONF_FILE, &stack_conf_table[0]))
-    {
-        return UIM_FAIL;
-    }
-#endif
 
     //Set the LPM command parameters based on config entries
     proc_set_lpm_param();
@@ -1433,6 +1580,9 @@ int main(void)
         return UIM_FAIL;
     }
 
+    /* Change ownership for sysfs entries so that bluetooth/fm processes can open it */
+    change_sysfs_owner();
+
     /* pass parameters from bt_vendor.conf to ldisc for patchram download */
     if (pass_vendor_params())
     {
@@ -1446,8 +1596,9 @@ int main(void)
     if ((err > 0) && (install == V4L2_STATUS_ON)) {
         UIM_DBG("install already set");
         upio_set_bluetooth_power(1);
+
+#if V4L2_SNOOP_ENABLE
         // handle HCI snoop
-        int fd_hcisnoop = -1;
         unsigned char snoop_enable = '0';
         if ((fd_hcisnoop = open(LDISC_SYSFS_SNOOP, O_RDONLY))< 0) {
             UIM_ERR("unable to open %s", LDISC_SYSFS_SNOOP);
@@ -1459,6 +1610,8 @@ int main(void)
         }
         if ((hci_snoop_enable == 1) || (snoop_enable=='1'))
             v4l2_start_hci_snoop();
+#endif
+
         if (st_uart_config(install) != 0)
         {
             UIM_ERR("st_uart_config failed");
@@ -1514,9 +1667,9 @@ RE_POLL_TILL_POLL_ERR:
         if ((install == V4L2_STATUS_ON) && (dev_fd == -1)) {
             UIM_DBG("set UART");
             upio_set_bluetooth_power(1);
-            /* start hci snoop thread */
-            // handle HCI snoop
-            int fd_hcisnoop = -1;
+
+#if V4L2_SNOOP_ENABLE
+            /* handle HCI snoop */
             unsigned char snoop_enable = '0';
             if ((fd_hcisnoop = open(LDISC_SYSFS_SNOOP, O_RDONLY)) < 0){
                 UIM_ERR("unable to open %s", LDISC_SYSFS_SNOOP);
@@ -1528,6 +1681,8 @@ RE_POLL_TILL_POLL_ERR:
             }
             if ((hci_snoop_enable == 1) || (snoop_enable=='1'))
                 v4l2_start_hci_snoop();
+#endif
+
             if (st_uart_config(install)!=0)
             {
                 UIM_ERR("st_uart_config failed");
@@ -1539,16 +1694,19 @@ RE_POLL_TILL_POLL_ERR:
             goto RE_POLL_TILL_POLL_ERR;
         }
         else if (install == V4L2_STATUS_OFF) {
-                // handle HCI snoop
-                int fd_hcisnoop;
-                unsigned char snoop_enable;
-                fd_hcisnoop = open(LDISC_SYSFS_SNOOP, O_RDONLY);
+#if V4L2_SNOOP_ENABLE
+            /* handle HCI snoop */
+            unsigned char snoop_enable;
+            if ((fd_hcisnoop = open(LDISC_SYSFS_SNOOP, O_RDONLY)) < 0) {
+                UIM_ERR("unable to open %s", LDISC_SYSFS_SNOOP);
+            } else {
                 read(fd_hcisnoop, &snoop_enable, 1);
                 UIM_DBG("snoop_enable = %c", snoop_enable);
                 close(fd_hcisnoop);
-                if(hci_snoop_enable == 1 || snoop_enable=='1'
-                    || (v4l2_get_hci_snoop_status() == HCI_SNOOP_RUNNING))
+            }
+            if(hci_snoop_enable == 1 || snoop_enable=='1')
                     v4l2_stop_hci_snoop();
+#endif
 
                 cleanup();
                 UIM_VER("setting upio power to 0");
@@ -1564,6 +1722,7 @@ RE_POLL_TILL_POLL_ERR:
             upio_set_bluetooth_power(0);
             UIM_ERR("Closing shared transport fd - st_fd");
             close(st_fd);
+            close(fd_hcisnoop);
             UIM_ERR("Restarting UIM due to error!");
             return UIM_FAIL;
         }
@@ -1574,5 +1733,3 @@ RE_POLL_TILL_POLL_ERR:
 
     return 0;
 }
-
-

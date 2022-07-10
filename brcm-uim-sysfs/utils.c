@@ -14,7 +14,7 @@
  *  along with this program;if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-  *  Copyright (C) 2009-2015 Broadcom Corporation
+  *  Copyright (C) 2009-2017 Broadcom Corporation
  */
 
 
@@ -26,11 +26,10 @@
  *
  ******************************************************************************/
 
+#include <stdlib.h>
 #include <errno.h>
 #include <pthread.h>
 #include <time.h>
-#include <malloc.h>
-#include <string.h>
 #include "utils.h"
 
 /******************************************************************************
@@ -45,6 +44,8 @@ static BUFFER_Q acl_rx_q;
 /*****************************************************************************
 **   UTILS INTERFACE FUNCTIONS
 *****************************************************************************/
+static void utils_queue_init (BUFFER_Q *p_q);
+
 
 /*******************************************************************************
 **
@@ -136,7 +137,7 @@ uint8_t* utils_alloc (int size)
     if(size > MAX_ACL_PKT_SIZE)
         return NULL;
 
-    p = malloc(size + BT_HC_BUFFER_HDR_SIZE);
+    p = (uint8_t *)(malloc(size + BT_HC_BUFFER_HDR_SIZE));
     if(p)
     {
         ((HC_BUFFER_HDR_T *)p)->p_next = NULL;
@@ -148,18 +149,18 @@ uint8_t* utils_alloc (int size)
 
 /*******************************************************************************
 **
-** Function        utils_alloc
+** Function        utils_release
 **
-** Description     allocate memory for buffer
+** Description     release memory from buffer
 **
 ** Returns         None
 **
 *******************************************************************************/
-void utils_release(HC_BT_HDR* ptr)
+void utils_release(void* ptr)
 {
-    HC_BT_HDR* p;
+    uint8_t* p;
 
-    p = ptr - BT_HC_BUFFER_HDR_SIZE;
+    p = (uint8_t*)ptr - BT_HC_BUFFER_HDR_SIZE;
     free(p);
 }
 
@@ -388,4 +389,3 @@ void utils_unlock (void)
 {
     pthread_mutex_unlock(&utils_mutex);
 }
-

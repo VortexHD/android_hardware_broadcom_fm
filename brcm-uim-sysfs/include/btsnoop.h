@@ -14,7 +14,7 @@
  *  along with this program;if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-  *  Copyright (C) 2009-2015 Broadcom Corporation
+  *  Copyright (C) 2009-2017 Broadcom Corporation
  */
 
 #ifndef V4L2_SNOOP
@@ -61,11 +61,17 @@ typedef struct
 #define MSG_FM_TO_HC_HCI_CMD           0x4000
 #define MSG_HC_TO_FM_HCI_EVT           0x3000
 
-void btsnoop_capture(HC_BT_HDR *p_buf, uint8_t is_rcvd);
-void btsnoop_open(char *p_path);
+/* Message event/cmd related to ANT+ */
+#define MSG_ANT_TO_HC_HCI_CMD          0x4100
+#define MSG_HC_TO_ANT_HCI_EVT          0x3100
+
+
+/* Function declarations */
 void btsnoop_init(void);
+void btsnoop_open(char *p_path);
 void btsnoop_close(void);
 void btsnoop_cleanup (void);
+void btsnoop_capture(HC_BT_HDR *p_buf, uint8_t is_rcvd);
 
 #endif
 

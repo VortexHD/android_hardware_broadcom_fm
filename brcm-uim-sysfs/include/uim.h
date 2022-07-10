@@ -15,7 +15,7 @@
  *  along with this program;if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
- *  Copyright (C) 2009-2015 Broadcom Corporation
+ *  Copyright (C) 2009-2017 Broadcom Corporation
  */
 
 
@@ -148,6 +148,20 @@ typedef struct {
 #define FW_PATCHFILE_SYSFS_ENTRY SYSFS_PREFIX "fw_patchfile"
 #define LDISC_SYSFS_SNOOP SYSFS_PREFIX "snoop_enable"
 
+#define LDISC_SYSFS_BT_ERR SYSFS_PREFIX "bt_err"
+#define LDISC_SYSFS_FM_ERR SYSFS_PREFIX "fm_err"
+
+#define FMRX_COMP_SCAN_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_comp_scan"
+#define FMRX_DEEMPH_MODE_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_deemph_mode"
+#define FMRX_RDS_AF_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_rds_af"
+#define FMRX_RDS_ON_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_rds_on"
+#define FMRX_BAND_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_band"
+#define FMRX_RSSI_LVL_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_rssi_lvl"
+#define FMRX_SNR_LVL_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_snr_lvl"
+#define FMRX_CHL_SPACE_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_chl_lvl"
+#define FMRX_AUDIO_PINS_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_fm_audio_pins"
+#define FMRX_SEARCH_ABORT_SYSFS_ENTRY "/sys/class/video4linux/radio0/fmrx_search_abort"
+
 /* install sysfs entry values */
 #define V4L2_STATUS_ERR '2'  // error occured in BT application (HCI command timeout or HW error)
 #define V4L2_STATUS_ON  '1'  // Atleast one procol driver is registered
@@ -173,16 +187,16 @@ typedef struct {
 #endif
 
 /* Functions to insert and remove the kernel modules from the system*/
-extern int init_module(void *, unsigned int, const char *);
+extern int init_module(void *, unsigned long, const char *);
 extern int delete_module(const char *, unsigned int);
 
 /* Function declarations */
 void proc_init_uart(int uart_fd, struct termios *termios);
 int st_uart_config(unsigned char install);
-int proc_hci_reset();
+int proc_hci_reset(void);
 extern int upio_set_bluetooth_power(int on);
-int proc_hci_uartclockset();
-void read_default_bdaddr();
-int proc_bdaddr();
+int proc_hci_uartclockset(void);
+int proc_bdaddr(void);
+void read_default_bdaddr(bdaddr_t *local_addr);
 
 #endif /* UIM_H */

@@ -14,7 +14,7 @@
  *  along with this program;if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-  *  Copyright (C) 2009-2015 Broadcom Corporation
+  *  Copyright (C) 2009-2017 Broadcom Corporation
  */
 
 
@@ -40,7 +40,6 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netdb.h>
-#include <string.h>
 
 /* for gettimeofday */
 #include <sys/time.h>
@@ -224,13 +223,15 @@ static int btsnoop_log_open(char *btsnoop_logfile)
     /* write the BT snoop header */
     if ((btsnoop_logfile != NULL) && (strlen(btsnoop_logfile) != 0))
     {
+        mode_t prevmask = umask(0);
         hci_btsnoop_fd = open(btsnoop_logfile, \
                               O_WRONLY|O_CREAT|O_TRUNC, \
                               S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH);
+        umask(prevmask);
         if (hci_btsnoop_fd == -1)
         {
             perror("open");
-            SNOOPDBG("btsnoop_log_open: Unable to open snoop log file\n");
+            SNOOPDBG("btsnoop_log_open: Unable to open snoop log file  errno: %s\n", strerror(errno));
             hci_btsnoop_fd = -1;
             return 0;
         }
@@ -462,13 +463,14 @@ void btsnoop_acl_data(uint8_t *p, uint8_t is_rcvd)
     }
 }
 
+#if defined(BTSNOOP_EXT_PARSER_INCLUDED) && (BTSNOOP_EXT_PARSER_INCLUDED == TRUE)
 /********************************************************************************
  ** API allow external realtime parsing of output using e.g hcidump
  *********************************************************************************/
 
 #define EXT_PARSER_PORT 4330
 
-__attribute__((unused)) static pthread_t thread_id;
+static pthread_t thread_id;
 static int s_listen = -1;
 static int ext_parser_fd = -1;
 
@@ -532,7 +534,7 @@ static int ext_parser_accept(int port)
     return s;
 }
 
-__attribute__((unused)) static int send_ext_parser(char *p, int len)
+static int send_ext_parser(char *p, int len)
 {
     int n;
 
@@ -566,14 +568,16 @@ static void ext_parser_detached(void)
     s_listen = -1;
 }
 
-static void interruptFn (__attribute__((unused)) int sig)
+static void interruptFn (int sig)
 {
+    UNUSED(sig);
     ALOGD("interruptFn");
     pthread_exit(0);
 }
 
-__attribute__((unused)) static void ext_parser_thread(__attribute__((unused)) void* param)
+static void ext_parser_thread(void* param)
 {
+    UNUSED(param);
     int fd;
     int sig = SIGUSR2;
     sigset_t sigSet;
@@ -605,6 +609,7 @@ void btsnoop_stop_listener(void)
     ALOGD("btsnoop_init");
     ext_parser_detached();
 }
+#endif /* defined(BTSNOOP_EXT_PARSER_INCLUDED) && (BTSNOOP_EXT_PARSER_INCLUDED == TRUE) */
 
 void btsnoop_init(void)
 {
@@ -654,8 +659,13 @@ void btsnoop_capture(HC_BT_HDR *p_buf, uint8_t is_rcvd)
 {
     uint8_t *p = (uint8_t *)(p_buf + 1) + p_buf->offset;
 
+#if defined(BTSNOOP_EXT_PARSER_INCLUDED) && (BTSNOOP_EXT_PARSER_INCLUDED == TRUE)
     SNOOPDBG("btsnoop_capture: fd = %d, type %x, rcvd %d, ext %d", \
              hci_btsnoop_fd, p_buf->event, is_rcvd, ext_parser_fd);
+#else
+    SNOOPDBG("btsnoop_capture: fd = %d, type %x, rcvd %d", \
+             hci_btsnoop_fd, p_buf->event, is_rcvd);
+#endif
 
 #if defined(A2DP_LATENCY_TRACKER_ENABLE) && (A2DP_LATENCY_TRACKER_ENABLE == TRUE)
     if ((p_buf->event & MSG_EVT_MASK) == MSG_HC_TO_STACK_HCI_ACL)
@@ -705,6 +715,7 @@ void btsnoop_capture(HC_BT_HDR *p_buf, uint8_t is_rcvd)
     {
         case MSG_HC_TO_STACK_HCI_EVT:
         case MSG_HC_TO_FM_HCI_EVT:
+        case MSG_HC_TO_ANT_HCI_EVT:
             SNOOPDBG("TYPE : EVT");
             btsnoop_hci_evt(p);
             break;
@@ -720,6 +731,7 @@ void btsnoop_capture(HC_BT_HDR *p_buf, uint8_t is_rcvd)
             break;
         case MSG_STACK_TO_HC_HCI_CMD:
         case MSG_FM_TO_HC_HCI_CMD:
+        case MSG_ANT_TO_HC_HCI_CMD:
             SNOOPDBG("TYPE : CMD");
             btsnoop_hci_cmd(p);
             break;
